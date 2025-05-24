@@ -4,22 +4,24 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.widget.EditText
 import android.widget.Toast
+import androidx.activity.viewModels
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.example.mybankapp.R
 import com.example.mybankapp.data.model.Account
 import com.example.mybankapp.databinding.ActivityMainBinding
-import com.example.mybankapp.domain.contract.AccountContract
-import com.example.mybankapp.domain.presenter.AccountPresenter
+import dagger.hilt.android.AndroidEntryPoint
 
-class MainActivity : AppCompatActivity(), AccountContract.View {
+
+@AndroidEntryPoint
+class MainActivity : AppCompatActivity(){
 
     private var _binding: ActivityMainBinding? = null
     private val binding get() = _binding!!
 
     // Презентер для управления логикой работы со счетами
-    private lateinit var presenter: AccountContract.Presenter
+    private val viewModel: AccountViewModel by viewModels()
 
     private lateinit var adapter: AccountAdapter
 
@@ -29,19 +31,16 @@ class MainActivity : AppCompatActivity(), AccountContract.View {
         val view = binding.root
         setContentView(view)
 
-        // Инициализация презентера
-        presenter = AccountPresenter(this)
-
         adapter = AccountAdapter(
             onDelete = { id ->
-                presenter.deleteAccount(id)
+                viewModel.deleteAccount(id)
             },
             onEdit = { account ->
                 //show edit dialog
                 showEditDialog(account)
             },
             onStatusToggle = { id, isChecked ->
-                presenter.updateAccountStatus(id, isChecked)
+                viewModel.updateAccountStatus(id, isChecked)
             }
         )
         binding.recyclerView.layoutManager = LinearLayoutManager(this)
@@ -52,22 +51,22 @@ class MainActivity : AppCompatActivity(), AccountContract.View {
         }
 
         // Загрузка списка счетов
-        presenter.loadAccounts()
+        viewModel.loadAccounts()
+        subscribeToLiveData()
     }
 
-    // Отображение списка счетов
-    override fun showAccounts(accounts: List<Account>) {
-        adapter.submitList(accounts)
-    }
-
-    // Отображение сообщения об ошибке
-    override fun showError(message: String) {
-        Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
-    }
-
-    // Отображение сообщения об успешной операции
-    override fun showSuccess(message: String) {
-        Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
+    private fun subscribeToLiveData(){
+        // Подписываюясь через observe к Livedata переменной accounts из viewModel
+        // и обновляю адаптер
+        viewModel.accounts.observe(this){
+            adapter.submitList(it)
+        }
+        viewModel.successMessage.observe(this){
+            Toast.makeText(this, it, Toast.LENGTH_SHORT).show()
+        }
+        viewModel.errorMessage.observe(this){
+            Toast.makeText(this, it, Toast.LENGTH_SHORT).show()
+        }
     }
 
     // Показ диалогового окна для добавления нового счета
@@ -89,7 +88,7 @@ class MainActivity : AppCompatActivity(), AccountContract.View {
                 val currency = currencyInput.text.toString()
 
                 // Вызов метода добавления счета в презентере
-                presenter.addAccount(name, balance, currency)
+                viewModel.addAccount(name, balance, currency)
             }
             .setNegativeButton("Отмена", null) // Кнопка отмены
             .show()
@@ -120,7 +119,7 @@ class MainActivity : AppCompatActivity(), AccountContract.View {
                     currency = currency
                 )
 
-                presenter.updateAccountFully(updated.id!!, updated)
+                viewModel.updateAccountFully(updated.id!!, updated)
             }
             .setNegativeButton("Отмена", null)
             .show()

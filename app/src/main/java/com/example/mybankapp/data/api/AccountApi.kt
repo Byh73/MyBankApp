@@ -41,5 +41,3 @@ interface AccountApi {
 
 
 }
-
-
