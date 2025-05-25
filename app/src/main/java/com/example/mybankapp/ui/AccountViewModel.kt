@@ -12,10 +12,17 @@ import retrofit2.Callback
 import retrofit2.Response
 import javax.inject.Inject
 
+//Это ViewModel, которая управляет данными аккаунтов для экрана и общается с API.
+//загружает данные аккаунтов,
+//хранит сообщения об успехе и ошибках,
+//даёт экрану (Activity/Fragment) доступ к этим данным через LiveData.
+// AccountViewModel — это посредник между UI и API.
+//Он управляет данными и сообщает об успехе/ошибках.
+//LiveData позволяет UI автоматически обновляться, когда данные меняются.
 @HiltViewModel
 class AccountViewModel @Inject constructor(
     private val accountApi: AccountApi
-): ViewModel(){
+) : ViewModel() {
 
     private val _accounts = MutableLiveData<List<Account>>()
     val accounts: LiveData<List<Account>> = _accounts
@@ -26,6 +33,13 @@ class AccountViewModel @Inject constructor(
     private val _errorMessage = MutableLiveData<String>()
     val errorMessage: LiveData<String> = _errorMessage
 
+    //accountApi.getAccounts() — вызывает запрос к серверу для получения списка аккаунтов.
+    //.enqueue(...) — выполняет этот запрос асинхронно (в фоновом потоке).
+    // Если ответ успешный (response.isSuccessful):
+    //Данные из ответа (response.body()) сохраняются в _accounts.
+    //Это обновит экран, потому что LiveData (accounts) изменилось.
+    //При ошибке: Устанавливается сообщение об ошибке в _errorMessage,
+    // чтобы UI мог показать, что что-то пошло не так.
     // Загрузка списка счетов
     fun loadAccounts() {
         // Выполняем асинхронный запрос к API для получения списка счетов
@@ -40,7 +54,11 @@ class AccountViewModel @Inject constructor(
                 }
             }
 
-            // Обработка ошибки сети или других исключений
+            //onFailure(...) вызывается, если запрос к серверу не дошёл
+            // или произошла ошибка на устройстве (например, нет Wi-Fi).
+            //t.message — содержит текст ошибки (например, "Ошибка сети").
+            //_errorMessage.value = ... — сохраняет сообщение об ошибке,
+            // чтобы показать его пользователю на экране.
             override fun onFailure(call: Call<List<Account>>, t: Throwable) {
                 // Показываем сообщение об ошибке сети
                 _errorMessage.value = "Ошибка сети: ${t.message}"
@@ -48,36 +66,43 @@ class AccountViewModel @Inject constructor(
         })
     }
 
-    // Добавление нового счета
+    //Создаёт объект Account с переданными данными:
+    //name, balance, currency,
+    //isActive = true — по умолчанию счёт активен.
+    //Отправляет запрос на сервер через accountApi.createAccount(account):
+    //Используется enqueue, чтобы запрос выполнялся асинхронно (в фоне, не блокируя интерфейс).
+    //Показывается сообщение: "Аккаунт добавлен".
+    //Вызывается loadAccounts() — чтобы перезагрузить список аккаунтов и отобразить новый.
+    // Если ответ сервера неуспешен:
+    //Показывается сообщение об ошибке: "Ошибка добавления".
+    // Если не удалось подключиться к серверу (onFailure):
+    //Показывается сообщение "Ошибка сети:".
     fun addAccount(name: String, balance: String, currency: String) {
-        // Создаем объект Account с переданными данными
         val account = Account(name = name, balance = balance, currency = currency, isActive = true)
 
-        // Выполняем асинхронный запрос к API для создания нового счета
         accountApi.createAccount(account).enqueue(object : Callback<Account> {
-            // Обработка успешного ответа
             override fun onResponse(call: Call<Account>, response: Response<Account>) {
                 if (response.isSuccessful) {
-                    // Показываем сообщение об успешном добавлении счета
                     _successMessage.value = "Аккаунт добавлен"
-                    // Обновляем список счетов после добавления
                     loadAccounts()
                 } else {
-                    // Показываем сообщение об ошибке, если ответ не успешен
                     _errorMessage.value = "Ошибка добавления"
                 }
             }
 
-            // Обработка ошибки сети или других исключений
             override fun onFailure(call: Call<Account>, t: Throwable) {
-                // Показываем сообщение об ошибке сети
                 _errorMessage.value = "Ошибка сети: ${t.message}"
             }
         })
     }
 
+    //Вызывает API-запрос на удаление:
+    //accountApi.deleteAccount(id) — говорит серверу: "удали счёт с таким ID".
+    //Асинхронно обрабатывает результат через .enqueue(...) — чтобы не блокировать интерфейс.
+    // Если всё ок — показывает "Удалено" и обновляет список.
+    //Если ошибка — показывает, что что-то пошло не так.
     fun deleteAccount(id: String) {
-        accountApi.deleteAccount(id).enqueue(object: Callback<Unit> {
+        accountApi.deleteAccount(id).enqueue(object : Callback<Unit> {
             override fun onResponse(call: Call<Unit>, response: Response<Unit>) {
                 if (response.isSuccessful) {
                     _successMessage.value = "Удалено"
@@ -91,11 +116,17 @@ class AccountViewModel @Inject constructor(
                 _errorMessage.value = "Ошибка сети: ${t.message}"
             }
 
-        } )
+        })
     }
 
+    //Эта функция полностью обновляет информацию о счёте на сервере по его id.
+    // Принимает:
+    //accountId — ID счёта, который нужно обновить.
+    //account — новые данные счёта (имя, баланс, валюта, активность и т.д.).
+    // Отправляет PUT-запрос на сервер:
+    //accountApi.updateAccountFully(...) — заменяет все поля счёта на новые.
     fun updateAccountFully(accountId: String, account: Account) {
-        accountApi.updateAccountFully(accountId, account).enqueue(object: Callback<Account>{
+        accountApi.updateAccountFully(accountId, account).enqueue(object : Callback<Account> {
             override fun onResponse(call: Call<Account>, response: Response<Account>) {
                 if (response.isSuccessful) {
                     _successMessage.value = "Успешно обновлен счет"
@@ -114,21 +145,29 @@ class AccountViewModel @Inject constructor(
 
     // функция для обновления статуса счета через PATCH, передается accountId и isActive, переопределяем onResponse
     // и onFailure и обрабатываем ответ через LiveData
+
+    //Она обновляет только статус (isActive) счёта на сервере с помощью запроса PATCH.
+    //accountId — ID счёта, у которого нужно изменить статус.
+    //isActive — новое значение статуса: true (активен) или false (неактивен).
+    // Создаёт объект PatchAccountStatusDTO(isActive) — это "обёртка" для передачи только одного поля.
+    // Отправляет PATCH-запрос через API:
+    //patchAccountStatus(...) — говорит серверу изменить только isActive.
     fun updateAccountStatus(accountId: String, isActive: Boolean) {
-        accountApi.patchAccountStatus(accountId, PatchAccountStatusDTO(isActive)).enqueue(object: Callback<Account>{
-            override fun onResponse(call: Call<Account>, response: Response<Account>) {
-                if (response.isSuccessful) {
-                    _successMessage.value = "Успешно обновлен cтатус счета"
-                    loadAccounts()
-                } else {
-                    _errorMessage.value = "Ошибка обновления статуса счета"
+        accountApi.patchAccountStatus(accountId, PatchAccountStatusDTO(isActive))
+            .enqueue(object : Callback<Account> {
+                override fun onResponse(call: Call<Account>, response: Response<Account>) {
+                    if (response.isSuccessful) {
+                        _successMessage.value = "Успешно обновлен cтатус счета"
+                        loadAccounts()
+                    } else {
+                        _errorMessage.value = "Ошибка обновления статуса счета"
+                    }
                 }
-            }
 
-            override fun onFailure(call: Call<Account>, t: Throwable) {
-                _errorMessage.value = "Ошибка сети: ${t.message}"
-            }
+                override fun onFailure(call: Call<Account>, t: Throwable) {
+                    _errorMessage.value = "Ошибка сети: ${t.message}"
+                }
 
-        })
+            })
     }
 }
