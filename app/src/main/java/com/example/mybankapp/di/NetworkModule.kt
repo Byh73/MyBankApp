@@ -67,4 +67,9 @@ object NetworkModule {
     fun provideAccountApi(retrofit: Retrofit): AccountApi {
         return retrofit.create(AccountApi::class.java)
     }
+
+    @Provides
+    fun provideAccountDetailsApi(retrofit: Retrofit): AccountApi {
+        return retrofit.create(AccountApi::class.java)
+    }
 }
